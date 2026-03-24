@@ -1,0 +1,109 @@
+{
+  "evals": [
+    {
+      "id": "eval_saas_startup_emr_spike",
+      "name": "SaaS Startup with EMR Cost Spike",
+      "description": "A B2B data platform running Spark on EMR Serverless with a recent cost spike from pipeline migration.",
+      "input": {
+        "prompt": "Our AWS bill went from $35K to $140K in one month. We recently migrated our data pipelines to Spark on EMR Serverless. Do a full audit and give me a verified action plan.",
+        "parameters": {
+          "time_period": "12 months",
+          "account_manager": null,
+          "output_format": "Google Doc",
+          "focus_area": "Full audit",
+          "stakeholders": "Engineering team"
+        }
+      },
+      "expectations": [
+        {
+          "type": "content_present",
+          "description": "Must check NAT Gateway costs and VPC endpoint configuration",
+          "check": "Output investigates NAT Gateway charges and S3 Gateway Endpoint status"
+        },
+        {
+          "type": "content_present",
+          "description": "Must check for Spark small-file antipattern",
+          "check": "Output investigates S3 PUT request costs and file sizes from Spark jobs"
+        },
+        {
+          "type": "content_present",
+          "description": "Must verify Savings Plans type and coverage",
+          "check": "Output distinguishes EC2 Instance SPs from Compute SPs and checks EMR coverage"
+        },
+        {
+          "type": "format_check",
+          "description": "Output must be reverse pyramid with table first",
+          "check": "Google Doc starts with stack-ranked table before detailed sections"
+        },
+        {
+          "type": "verification_check",
+          "description": "Every dollar estimate must have confidence level",
+          "check": "Each savings estimate includes a confidence percentage"
+        }
+      ]
+    },
+    {
+      "id": "eval_ecs_rds_standard",
+      "name": "Standard ECS + RDS Stack",
+      "description": "Typical SaaS startup on ECS Fargate + RDS PostgreSQL + S3 + CloudFront.",
+      "input": {
+        "prompt": "Review our AWS costs for the last 6 months. We run on ECS Fargate + RDS PostgreSQL + S3 + CloudFront. Our AWS account manager is Jane Smith (jane@amazon.com). Output a Google Doc.",
+        "parameters": {
+          "time_period": "6 months",
+          "account_manager": "Jane Smith jane@amazon.com",
+          "output_format": "Google Doc",
+          "focus_area": "Full audit",
+          "stakeholders": "VP Engineering, DevOps lead"
+        }
+      },
+      "expectations": [
+        {
+          "type": "content_present",
+          "description": "Must analyze all four named services",
+          "check": "Output covers ECS, RDS, S3, and CloudFront with cost data"
+        },
+        {
+          "type": "content_present",
+          "description": "Must search Gmail for account manager emails",
+          "check": "Output references findings from Jane Smith emails or notes none found"
+        },
+        {
+          "type": "content_present",
+          "description": "Must check RI and SP coverage for RDS and ECS",
+          "check": "Output identifies commitment gaps for Fargate and RDS"
+        },
+        {
+          "type": "format_check",
+          "description": "Must produce stack-ranked table with RAG ratings",
+          "check": "Google Doc contains a table with RAG, Owner, Status columns"
+        }
+      ]
+    },
+    {
+      "id": "eval_minimal_input",
+      "name": "Minimal Input",
+      "description": "Tests whether the skill gathers context when given minimal information.",
+      "input": {
+        "prompt": "Our AWS bill doubled. Help.",
+        "parameters": {}
+      },
+      "expectations": [
+        {
+          "type": "workflow_check",
+          "description": "Must ask clarifying questions",
+          "check": "Skill uses AskUserQuestion to gather time period, stakeholders, output format"
+        },
+        {
+          "type": "content_present",
+          "description": "Must identify cost spike drivers",
+          "check": "Output uses cost comparison drivers to explain the increase"
+        },
+        {
+          "type": "format_check",
+          "description": "Must produce actionable output",
+          "check": "Output contains specific action items with savings estimates"
+        }
+      ]
+    }
+  ]
+}
