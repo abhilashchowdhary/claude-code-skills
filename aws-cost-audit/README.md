@@ -4,6 +4,131 @@ A comprehensive AWS cost optimization skill for Claude Code that performs a full
 
 **Built from a real audit that identified $76-101K/month in verified savings on a ~$140K/month AWS bill.**
 
+## One-Command Setup
+
+This installs everything -- creates an IAM user with read-only Cost Explorer permissions, generates an access key, configures the MCP server, and installs the skill.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/abhilashchowdhary/claude-code-skills/main/aws-cost-audit/setup.sh | bash
+```
+
+**What it does (in 30 seconds):**
+
+```
+[1/6] Checks prerequisites (AWS CLI, uvx, Claude Code)
+[2/6] Creates IAM policy "CostExplorerMCPPolicy" (read-only ce:*, compute-optimizer:*, budgets:ViewBudget)
+[3/6] Creates IAM user "claude-cost-explorer"
+[4/6] Generates access key and secret
+[5/6] Adds MCP server config to ~/.claude/settings.json
+[6/6] Downloads and installs the /aws-cost-audit skill
+```
+
+**Prerequisites:**
+- AWS CLI installed and configured with admin credentials (`aws configure`)
+- Python 3.10+
+- Claude Code CLI installed
+
+After setup, restart Claude Code and run:
+```
+/aws-cost-audit
+```
+
+### Manual Setup
+
+If you prefer to do it step by step:
+
+<details>
+<summary>Click to expand manual setup</summary>
+
+#### 1. Create IAM Policy
+
+```bash
+aws iam create-policy \
+  --policy-name CostExplorerMCPPolicy \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "ce:GetCostAndUsage",
+          "ce:GetCostAndUsageWithResources",
+          "ce:GetCostForecast",
+          "ce:GetDimensionValues",
+          "ce:GetTags",
+          "ce:GetCostAndUsageComparisons",
+          "ce:GetCostComparisonDrivers",
+          "ce:GetReservationCoverage",
+          "ce:GetReservationUtilization",
+          "ce:GetSavingsPlansCoverage",
+          "ce:GetSavingsPlansUtilization",
+          "ce:GetUsageForecast",
+          "ce:GetAnomalies",
+          "ce:GetCostCategories",
+          "compute-optimizer:Get*",
+          "budgets:ViewBudget"
+        ],
+        "Resource": "*"
+      }
+    ]
+  }'
+```
+
+#### 2. Create IAM User + Access Key
+
+```bash
+aws iam create-user --user-name claude-cost-explorer
+aws iam attach-user-policy \
+  --user-name claude-cost-explorer \
+  --policy-arn arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/CostExplorerMCPPolicy
+aws iam create-access-key --user-name claude-cost-explorer
+# Save the AccessKeyId and SecretAccessKey from the output
+```
+
+#### 3. Install uvx (if not already installed)
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+#### 4. Add to Claude Code settings
+
+Edit `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "aws-cost": {
+      "command": "uvx",
+      "args": ["awslabs.cost-explorer-mcp-server@latest"],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "YOUR_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY": "YOUR_SECRET_ACCESS_KEY",
+        "AWS_REGION": "us-east-1",
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    }
+  }
+}
+```
+
+#### 5. Install the skill
+
+```bash
+cp SKILL.md ~/.claude/commands/aws-cost-audit.md
+```
+
+</details>
+
+### Security Notes
+
+- The IAM user has **read-only** access. It cannot create, modify, or delete any AWS resources.
+- The only cost incurred is **$0.01 per Cost Explorer API call** (typically 15-40 calls per audit = $0.15-$0.40).
+- Access key is stored in `~/.claude/settings.json` -- treat this file as sensitive.
+- To revoke access: `aws iam delete-user --user-name claude-cost-explorer`
+
+---
+
 ## What It Does
 
 ```
@@ -49,38 +174,7 @@ A Google Doc with:
 5. **Pending follow-ups** with AWS account team
 6. **What's already been done** (credit for completed optimizations)
 
-## Quick Start
-
-### Prerequisites
-
-You need these MCP servers configured:
-
-- **AWS Cost Explorer MCP** -- for cost data ([aws-cost MCP](https://github.com/awslabs/mcp))
-- **GitHub MCP** -- for repo analysis
-- **Slack MCP** -- for conversation search
-- **Gmail MCP** -- for account manager emails
-- **Linear MCP** -- for project tracking (or substitute Jira)
-- **gws CLI** -- for Google Docs output
-
-### Install
-
-**Claude Code CLI:**
-```bash
-cp SKILL.md ~/.claude/commands/aws-cost-audit.md
-```
-
-Then run:
-```
-/aws-cost-audit
-```
-
-**Claude Desktop / Cowork:**
-
-Download `aws-cost-audit.skill` from [Releases](../../releases) and import via Customize > Skills.
-
-### Parameters
-
-The skill will ask you:
+## Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -105,21 +199,20 @@ After the initial research, the skill launches a **verification agent** that re-
    - **30%** -- unverifiable from current data
 4. **Corrects** any over/under-estimates from the initial pass
 
-Specific verification rules baked in:
+Verification rules baked in:
 - Compute Savings Plans cover EC2 + EMR + Fargate + Lambda. EC2 Instance SPs only cover EC2.
 - Database Savings Plans cover RDS + Aurora compute only -- not storage, backups, or proxy.
-- S3 Intelligent-Tiering only helps for data that's 30+ days old and infrequently accessed.
-- NAT Gateway costs are per-GB processed -- check VPC Flow Logs to confirm traffic patterns.
-- EMR Serverless Graviton/ARM is ~20% cheaper but savings depend on sequencing with other optimizations.
+- S3 Intelligent-Tiering only helps for data 30+ days old and infrequently accessed.
+- NAT Gateway costs are per-GB -- check VPC Flow Logs to confirm traffic patterns.
 - Partial-month data must be projected using days_in_month / days_elapsed.
 
 ## RAG Classification
 
 | Rating | Criteria | Typical items |
 |--------|----------|---------------|
-| RED | Do this week. Active cost bleeding or misconfiguration. >$10K/mo impact. | Missing VPC endpoints, runaway pipelines, small-file antipatterns |
-| AMBER | Do this month. Optimization requiring some effort. $1-10K/mo. | Savings Plans, Graviton migration, cadence reduction |
-| GREEN | Next 30-60 days. Structural improvements, <$1K/mo or unverifiable. | Terraform, cross-AZ optimization, vendor evaluations |
+| RED | Do this week. Active bleeding or misconfiguration. >$10K/mo. | Missing VPC endpoints, runaway pipelines, small-file antipatterns |
+| AMBER | Do this month. Optimization needing effort. $1-10K/mo. | Savings Plans, Graviton migration, cadence reduction |
+| GREEN | Next 30-60 days. Structural improvements, <$1K/mo. | Terraform, cross-AZ optimization, vendor evaluations |
 
 ## Example Results
 
